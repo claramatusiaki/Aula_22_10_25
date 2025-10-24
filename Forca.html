@@ -1,0 +1,180 @@
+
+* Abram o dontpad o código é 3bccmaulas
+
+Código que usaremos será esse:
+
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Jogo da Forca — Simples</title>
+  <style>
+    :root{font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial;}
+    body{display:flex;min-height:100vh;align-items:center;justify-content:center;background:#f3f4f6;margin:0;padding:20px}
+    .card{background:white;padding:20px;border-radius:12px;box-shadow:0 6px 18px rgba(15,23,42,0.08);max-width:760px;width:100%}
+    h1{margin:0 0 12px;font-size:20px}
+    .top{display:flex;gap:20px;align-items:center}
+    .canvas{width:220px;height:260px}
+    .word{font-size:28px;letter-spacing:6px;margin:18px 0}
+    .letters{display:flex;flex-wrap:wrap;gap:8px}
+    .letters button{width:40px;height:40px;border-radius:8px;border:1px solid #e5e7eb;background:#fff;cursor:pointer}
+    .letters button:disabled{opacity:.45;cursor:not-allowed}
+    .info{margin-top:12px;display:flex;gap:10px;align-items:center}
+    .bad{color:#b91c1c}
+    .good{color:#059669}
+    .controls{margin-top:12px}
+    .btn{padding:8px 12px;border-radius:8px;border:0;background:#111827;color:#fff;cursor:pointer}
+    small{color:#6b7280}
+    footer{margin-top:14px;font-size:13px;color:#6b7280}
+    @media (max-width:640px){.top{flex-direction:column;align-items:flex-start}.canvas{width:160px;height:200px}}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="top">
+      <div>
+        <h1>Jogo da Forca — Simples</h1>
+        <div class="word" id="word">_ _ _ _ _</div>
+        <div class="info"><span>Erros: <strong id="mistakes">0</strong>/6</span><span id="status" style="margin-left:12px"></span></div>
+        <div class="controls">
+          <button id="restart" class="btn">Reiniciar</button>
+        </div>
+      </div>
+
+      <div style="margin-left:auto">
+        <svg class="canvas" id="hangman" viewBox="0 0 200 250" aria-hidden="true">
+          <!-- suporte -->
+          <line x1="20" y1="230" x2="180" y2="230" stroke="#333" stroke-width="4" stroke-linecap="round"/>
+          <line x1="40" y1="230" x2="40" y2="20" stroke="#333" stroke-width="6" stroke-linecap="round"/>
+          <line x1="40" y1="20" x2="120" y2="20" stroke="#333" stroke-width="6" stroke-linecap="round"/>
+          <line x1="120" y1="20" x2="120" y2="40" stroke="#333" stroke-width="4" stroke-linecap="round"/>
+          <!-- partes do corpo (visibilidade controlada) -->
+          <circle id="head" cx="120" cy="60" r="18" stroke="#111" stroke-width="3" fill="transparent" style="display:none"/>
+          <line id="body" x1="120" y1="78" x2="120" y2="140" stroke="#111" stroke-width="4" stroke-linecap="round" style="display:none"/>
+          <line id="leftArm" x1="120" y1="90" x2="95" y2="115" stroke="#111" stroke-width="4" stroke-linecap="round" style="display:none"/>
+          <line id="rightArm" x1="120" y1="90" x2="145" y2="115" stroke="#111" stroke-width="4" stroke-linecap="round" style="display:none"/>
+          <line id="leftLeg" x1="120" y1="140" x2="95" y2="180" stroke="#111" stroke-width="4" stroke-linecap="round" style="display:none"/>
+          <line id="rightLeg" x1="120" y1="140" x2="145" y2="180" stroke="#111" stroke-width="4" stroke-linecap="round" style="display:none"/>
+        </svg>
+      </div>
+    </div>
+
+    <div style="margin-top:18px">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <small>Escolha uma letra:</small>
+        </div>
+        <div><small>Dica: palavras em português</small></div>
+      </div>
+
+      <div class="letters" id="letters"></div>
+    </div>
+
+    <footer>
+      <small>Simples, sem servidor — é tudo local no seu navegador.</small>
+    </footer>
+  </div>
+
+  <script>
+    // lista de palavras (pode adicionar mais)
+    const words = [
+      'JAVASCRIPT','PROGRAMAR','FORCA','NAVIO','CAMINHO','ELEFANTE','BRASIL','DESAFIO','PIZZA','TECLADO'
+    ];
+
+    let answer = '';
+    let guessed = [];
+    let mistakes = 0;
+    const maxMistakes = 6;
+
+    const wordEl = document.getElementById('word');
+    const lettersEl = document.getElementById('letters');
+    const mistakesEl = document.getElementById('mistakes');
+    const statusEl = document.getElementById('status');
+    const restartBtn = document.getElementById('restart');
+
+    const parts = ['head','body','leftArm','rightArm','leftLeg','rightLeg'];
+
+    function pickWord(){
+      const i = Math.floor(Math.random()*words.length);
+      return words[i];
+    }
+
+    function init(){
+      answer = pickWord();
+      guessed = [];
+      mistakes = 0;
+      mistakesEl.textContent = mistakes;
+      statusEl.textContent = '';
+      renderWord();
+      createLetterButtons();
+      parts.forEach(id=>document.getElementById(id).style.display='none');
+    }
+
+    function renderWord(){
+      const display = answer.split('').map(l => (guessed.includes(l) ? l : '_')).join(' ');
+      wordEl.textContent = display;
+
+      // verifica vitória
+      if(!display.includes('_')){
+        statusEl.textContent = ' — Você ganhou!';
+        statusEl.className = 'good';
+        disableLetters(true);
+      }
+    }
+
+    function createLetterButtons(){
+      lettersEl.innerHTML = '';
+      const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+      letters.forEach(l =>{
+        const btn = document.createElement('button');
+        btn.textContent = l;
+        btn.setAttribute('type','button');
+        btn.addEventListener('click', ()=>handleGuess(l, btn));
+        lettersEl.appendChild(btn);
+      });
+    }
+
+    function disableLetters(disabled){
+      document.querySelectorAll('#letters button').forEach(b=>b.disabled = disabled);
+    }
+
+    function handleGuess(letter, btn){
+      btn.disabled = true;
+      if(answer.includes(letter)){
+        guessed.push(letter);
+        renderWord();
+      } else {
+        mistakes++;
+        mistakesEl.textContent = mistakes;
+        revealPart(mistakes-1);
+        if(mistakes >= maxMistakes){
+          gameOver();
+        }
+      }
+    }
+
+    function revealPart(index){
+      if(index < parts.length){
+        const el = document.getElementById(parts[index]);
+        if(el) el.style.display = 'block';
+      }
+    }
+
+    function gameOver(){
+      statusEl.textContent = ' — Você perdeu! A palavra era: ' + answer;
+      statusEl.className = 'bad';
+      // mostra a palavra completa
+      wordEl.textContent = answer.split('').join(' ');
+      disableLetters(true);
+    }
+
+    restartBtn.addEventListener('click', init);
+
+    // inicia ao carregar
+    init();
+  </script>
+</body>
+</html>
+
+
