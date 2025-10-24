@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Jogo da Cobrinha — VS Code</title>
+  <style>
+    :root{
+      --bg:#0f1724; /* azul escuro */
+      --grid:#111827;
+      --snake:#10b981; /* verde */
+      --food:#ef4444; /* vermelho */
+      --panel:#0b1220cc;
+      --glass: rgba(255,255,255,0.04);
+    }
+    *{box-sizing:border-box;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg),#081021);color:#e6eef8}
+    .wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem}
+
+    .game-card{display:grid;grid-template-columns:360px 1fr;gap:1.25rem;background:var(--panel);padding:1rem;border-radius:12px;box-shadow:0 6px 30px rgba(2,6,23,.6);backdrop-filter:blur(6px)}
+
+    /* área do jogo */
+    .stage{width:360px;height:360px;background:linear-gradient(180deg,#061024,#081226);border-radius:8px;padding:10px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,0.03)}
+    canvas{background:repeating-linear-gradient(45deg, transparent 0 20px, rgba(255,255,255,0.01) 20px 21px), var(--grid);width:100%;height:100%;display:block;border-radius:6px}
+
+    /* painel lateral */
+    .panel{padding:0.75rem 1rem;border-radius:8px;background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);display:flex;flex-direction:column;gap:.75rem}
+    h1{font-size:1.1rem;margin:0 0 .25rem 0}
+    .score{font-weight:700;font-size:1.6rem}
+    .meta{font-size:.85rem;color:#9fb0c9}
+
+    .controls{display:flex;gap:.5rem;flex-wrap:wrap}
+    button{background:var(--glass);border:1px solid rgba(255,255,255,0.04);padding:.5rem .75rem;border-radius:8px;color:inherit;cursor:pointer}
+    button.primary{background:linear-gradient(90deg,#0ea5a4,#06b6d4);color:#031019;border:none}
+    .hint{font-size:.85rem;color:#9fb0c9}
+
+    footer{grid-column:1/-1;text-align:right;font-size:.8rem;color:#8fa7c2}
+
+    @media (max-width:760px){
+      .game-card{grid-template-columns:1fr;max-width:420px}
+      .stage{width:100%;height:300px}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="game-card">
+      <div class="stage">
+        <canvas id="board" width="360" height="360" aria-label="Jogo da cobrinha"></canvas>
+      </div>
+
+      <div class="panel">
+        <div>
+          <h1>Jogo da Cobrinha</h1>
+          <div class="meta">Crie no VS Code — HTML / CSS / JS</div>
+        </div>
+
+        <div>
+          <div>Placar</div>
+          <div class="score" id="score">0</div>
+          <div class="hint">Use as setas do teclado ou WASD. Pressione Espaço para pausar.</div>
+        </div>
+
+        <div class="controls">
+          <button id="start" class="primary">Iniciar</button>
+          <button id="pause">Pausar</button>
+          <button id="reset">Resetar</button>
+          <button id="speedUp">+ Velocidade</button>
+          <button id="speedDown">- Velocidade</button>
+        </div>
+
+        <div>
+          <label>Velocidade: <span id="speedLabel">8</span> (ticks/s)</label>
+        </div>
+
+        <div>
+          <strong>Dicas</strong>
+          <ul>
+            <li>Coma a comida vermelha para crescer e ganhar pontos.</li>
+            <li>Colidir com parede ou com o próprio corpo termina o jogo.</li>
+            <li>Abra no navegador ou use a extensão Live Server no VS Code.</li>
+          </ul>
+        </div>
+
+      </div>
+
+      <footer>By Você — Exemplo simples e comentado</footer>
+    </div>
+  </div>
+
+  <script>
+    /* Jogo da cobrinha — simples e comentado
+       Estrutura:
+       - grade 20x20 (cada célula é TILE)
+       - snake = array de posições {x,y}
+       - food: posição aleatória
+       - game loop com setInterval (velocidade ajustável)
+    */
+
+    const canvas = document.getElementById('board');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const startBtn = document.getElementById('start');
+    const pauseBtn = document.getElementById('pause');
+    const resetBtn = document.getElementById('reset');
+    const speedUpBtn = document.getElementById('speedUp');
+    const speedDownBtn = document.getElementById('speedDown');
+    const speedLabel = document.getElementById('speedLabel');
+
+    const TILE = 18; // pixels por célula
+    const COLS = Math.floor(canvas.width / TILE);
+    const ROWS = Math.floor(canvas.height / TILE);
+
+    let snake, dir, food, score, tickInterval, running, speed;
+
+    function resetGame(){
+      snake = [ {x: Math.floor(COLS/2), y: Math.floor(ROWS/2)}, {x: Math.floor(COLS/2)-1, y: Math.floor(ROWS/2)} ];
+      dir = {x:1,y:0};
+      spawnFood();
+      score = 0;
+      updateScore();
+      speed = 8; // ticks por segundo
+      setTick();
+      running = false;
+    }
+
+    function setTick(){
+      if(tickInterval) clearInterval(tickInterval);
+      tickInterval = setInterval(tick, 1000 / speed);
+      speedLabel.textContent = speed;
+    }
+
+    function spawnFood(){
+      do{
+        food = {x: randInt(0,COLS-1), y: randInt(0,ROWS-1)};
+      } while(snake.some(s => s.x === food.x && s.y === food.y));
+    }
+
+    function randInt(min,max){ return Math.floor(Math.random()*(max-min+1))+min }
+
+    function tick(){
+      if(!running) return;
+      // nova cabeça
+      const head = {x: snake[0].x + dir.x, y: snake[0].y + dir.y};
+
+      // colisão com paredes
+      if(head.x < 0 || head.x >= COLS || head.y < 0 || head.y >= ROWS){
+        gameOver();
+        return;
+      }
+
+      // colisão com o corpo
+      if(snake.some(seg => seg.x === head.x && seg.y === head.y)){
+        gameOver();
+        return;
+      }
+
+      snake.unshift(head);
+
+      // comer comida
+      if(head.x === food.x && head.y === food.y){
+        score += 10;
+        updateScore();
+        spawnFood();
+      } else {
+        snake.pop(); // se não comeu, remove cauda
+      }
+
+      draw();
+    }
+
+    function draw(){
+      // limpa
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+
+      // fundo em grade sutil
+      ctx.fillStyle = '#0b1220';
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+
+      // desenha comida
+      drawCell(food.x, food.y, getComputedStyle(document.documentElement).getPropertyValue('--food') || '#ef4444');
+
+      // desenha cobrinha
+      for(let i=0;i<snake.length;i++){
+        const s = snake[i];
+        let color = i===0 ? '#06b6d4' : '#10b981';
+        drawCell(s.x, s.y, color, i===0);
+      }
+    }
+
+    function drawCell(cx, cy, color, isHead=false){
+      const px = cx * TILE;
+      const py = cy * TILE;
+      ctx.fillStyle = color;
+      ctx.fillRect(px+1, py+1, TILE-2, TILE-2);
+
+      // brilho para a cabeça
+      if(isHead){
+        ctx.fillStyle = 'rgba(255,255,255,0.08)';
+        ctx.fillRect(px+3, py+3, TILE-6, TILE-6);
+      }
+    }
+
+    function updateScore(){ scoreEl.textContent = score }
+
+    function gameOver(){
+      running = false;
+      alert('Game Over! Sua pontuação: ' + score);
+    }
+
+    // controles
+    window.addEventListener('keydown', e => {
+      const key = e.key;
+      if(key === 'ArrowUp' || key === 'w' || key === 'W') setDir(0,-1);
+      if(key === 'ArrowDown' || key === 's' || key === 'S') setDir(0,1);
+      if(key === 'ArrowLeft' || key === 'a' || key === 'A') setDir(-1,0);
+      if(key === 'ArrowRight' || key === 'd' || key === 'D') setDir(1,0);
+      if(key === ' '){ running = !running; }
+    });
+
+    function setDir(x,y){
+      // evita inverter 180° para a direção oposta
+      if(snake.length > 1 && snake[0].x + x === snake[1].x && snake[0].y + y === snake[1].y) return;
+      dir = {x,y};
+    }
+
+    // botões
+    startBtn.addEventListener('click', ()=>{ running = true });
+    pauseBtn.addEventListener('click', ()=>{ running = false });
+    resetBtn.addEventListener('click', ()=>{ resetGame(); draw(); });
+    speedUpBtn.addEventListener('click', ()=>{ speed = Math.min(25, speed+1); setTick(); });
+    speedDownBtn.addEventListener('click', ()=>{ speed = Math.max(1, speed-1); setTick(); });
+
+    // inicializa
+    resetGame();
+    draw();
+
+  </script>
+</body>
+</html>
+
+
